@@ -414,6 +414,180 @@
 #             print("Test Loss: {:.4f}".format(test_loss))
 
 
+# import logging
+# import os
+# import sys
+# from os import path
+# import numpy as np
+# import tensorflow as tf
+# import config
+# import data
+# import embeddings
+# from models.BiLstmTextRelation import BiLstmTextRelation
+# from models.FastText import FastText
+# from models.HierarchicalAttention import HierarchicalAttention
+# from models.Seq2SeqAttn import Seq2SeqAttn
+# from models.TextCNN import TextCNN
+# from models.TextRCNN import TextRCNN
+# from models.TextRNN import TextRNN
+
+# filter_sizes = [1, 2, 3, 4, 5, 6, 7]
+# os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "5"
+
+# # Model Evaluation
+# def do_eval(sess, model, evalX, evalY, batch_size):
+#     val_loss = []
+#     val_acc = []
+#     number_examples = len(evalX)
+#     for start, end in zip(range(0, number_examples, batch_size), range(batch_size, number_examples, batch_size)):
+#         if isinstance(model, FastText):
+#             feed_dict = {model.input_x: evalX[start:end], model.input_y: evalY[start:end]}
+#         else:
+#             feed_dict = {model.input_x: evalX[start:end], model.dropout_keep_prob: 1.0, model.input_y: evalY[start:end]}
+
+#         curr_eval_loss, curr_eval_acc = sess.run([model.loss_val, model.accuracy], feed_dict=feed_dict)
+#         val_loss.append(curr_eval_loss)
+#         val_acc.append(curr_eval_acc)
+
+#     return np.mean(val_loss), np.mean(val_acc)
+
+# if __name__ == '__main__':
+#     ckpt_dir = "ckpt_dir"
+#     if not path.exists("./ckpt_dir"):
+#         os.mkdir("./ckpt_dir")
+
+#     # Parse Arguments
+#     args = config.parse_args(sys.argv[1:])
+#     datadir = args.dir
+
+#     # Load data
+#     dataset_name = 'cmu' if 'cmu' in datadir else 'na'
+#     logging.info('dataset: %s' % dataset_name)
+#     data_tuple = data.load_data(data_home=args.dir, encoding=args.encoding, mindf=args.mindf, dataset_name=dataset_name, task=args.task)
+
+#     trainX, trainY, devX, devY, testX, testY, trainU, devU, testU, labels = data_tuple
+
+#     # Load embeddings
+#     vocabulary_word2index, vocabulary_index2word = embeddings.create_vocabulary(
+#         word2vec_model_path=args.word2vec_model_path, name_scope="cnn2")
+#     vocab_size = len(vocabulary_word2index)
+#     logging.info("cnn_model.vocab_size: %s" % vocab_size)
+
+#     # Training
+#     logging.info("Initializing model: %s" % args.modelname)
+#     max_checks_without_progress = 10
+#     best_loss = np.infty
+
+#     # Instantiate the model
+#     if args.modelname == "TextCNN":
+#         model = TextCNN(filter_sizes, num_filters=args.num_filters, num_classes=args.num_classes,
+#                         learning_rate=args.learning_rate, batch_size=args.batch_size, batchnorm=args.batchnorm,
+#                         decay_steps=args.decay_steps, decay_rate=args.decay_rate, sequence_length=args.sentence_len,
+#                         vocab_size=vocab_size, embed_size=args.embed_size, is_training=args.is_training,
+#                         is_classifier=args.is_classifier, optimizer=args.optimizer, clip_gradients=5.0,
+#                         decay_rate_big=0.5, initializer=tf.random_normal_initializer(stddev=0.1))
+#     elif args.modelname == "TextRNN":
+#         model = TextRNN(num_classes=args.num_classes, learning_rate=args.learning_rate, batch_size=args.batch_size,
+#                         decay_steps=args.decay_steps, decay_rate=args.decay_rate, sequence_length=args.sentence_len,
+#                         vocab_size=vocab_size, embed_size=args.embed_size, is_training=args.is_training,
+#                         batchnorm=args.batchnorm, is_classifier=args.is_classifier, optimizer=args.optimizer,
+#                         initializer=tf.random_normal_initializer(stddev=0.1))
+#     # Add conditions for other models similarly
+
+#     # Check for GPU availability
+#     gpus = tf.config.experimental.list_physical_devices('GPU')
+#     if gpus:
+#         for gpu in gpus:
+#             tf.config.experimental.set_memory_growth(gpu, True)
+
+#     with tf.compat.v1.Session() as sess:
+#         checkpoint = tf.train.latest_checkpoint(ckpt_dir)
+#         if checkpoint:
+#             logging.info("Restoring Variables from Checkpoint")
+#             # Load the model
+#             model.load_weights(checkpoint)
+#         else:
+#             logging.error("Checkpoint directory not found.")
+
+#         if os.path.exists(ckpt_dir + "checkpoint"):
+#             print("Restoring Variables from Checkpoint")
+#             saver.restore(sess, tf.train.latest_checkpoint(ckpt_dir))
+#         else:
+#             print('Initializing Variables')
+#             sess.run(tf.compat.v1.global_variables_initializer())
+#             if args.use_embedding:
+#                 embeddings.assign_pretrained_word_embedding(sess, args, vocabulary_index2word, vocab_size, model,
+#                                                             word2vec_model_path=args.word2vec_model_path)
+
+#         curr_epoch = sess.run(model.epoch_step)
+
+#         number_of_training_data = len(trainX)
+#         print("Feed data and Train")
+#         batch_size = args.batch_size
+
+#         for epoch in range(curr_epoch, args.num_epochs):
+#             train_loss = []
+#             train_acc = []
+
+#             loss, acc, counter = 0.0, 0.0, 0
+#             for start, end in zip(range(0, number_of_training_data, batch_size),
+#                                   range(batch_size, number_of_training_data, batch_size)):
+#                 if isinstance(model, FastText):
+#                     feed_dict = {model.input_x: trainX[start:end], model.input_y: trainY[start:end]}
+#                 else:
+#                     feed_dict = {model.input_x: trainX[start:end], model.dropout_keep_prob: 0.5, model.input_y: trainY[start:end]}
+
+#                 curr_loss, curr_acc, _ = sess.run([model.loss_val, model.accuracy, model.train_op], feed_dict)
+#                 loss, counter, acc = loss + curr_loss, counter + 1, acc + curr_acc
+
+#                 train_loss.append(loss)
+#                 train_acc.append(acc)
+
+#                 if counter % 50 == 0:
+#                     if args.is_classifier:
+#                         print("Epoch %d\tCounter %d\tTrain Loss:%.4f\tTrain Accuracy:%.4f" %
+#                               (epoch, counter, loss / float(counter), acc / float(counter)))
+#                     else:
+#                         print("Epoch %d\tCounter %d\tTrain Loss:%.4f" % (epoch, counter, loss / float(counter)))
+
+#             sess.run(model.epoch_increment)
+
+#             avg_train_loss = np.mean(train_loss)
+#             avg_train_acc = np.mean(train_acc)
+
+#             logging.info("Evaluating on Dev set ....")
+#             avg_valid_loss, avg_valid_acc = do_eval(sess, model, devX, devY, batch_size)
+
+#             if args.is_classifier:
+#                 print("Epoch: {}/{}".format(epoch, args.num_epochs), "Dev Loss: {:.4f}".format(avg_valid_loss),
+#                       "Dev Acc: {:.4f}".format(avg_valid_acc))
+#             else:
+#                 print("Epoch: {}/{}".format(epoch, args.num_epochs), "Dev Loss: {:.4f}".format(avg_valid_loss))
+
+#             if args.earlystop:
+#                 if avg_valid_loss < best_loss:
+#                     save_path = ckpt_dir + "/model.ckpt"
+#                     logging.info("Saving model to checkpoint to %s" % save_path)
+#                     saver.save(sess, save_path, global_step=epoch)
+#                     best_loss = avg_valid_loss
+#                     checks_without_progress = 0
+#                 else:
+#                     checks_without_progress += 1
+#                     if checks_without_progress > max_checks_without_progress:
+#                         print("Early stopping!")
+#                         break
+#             else:
+#                 logging.info("Not using early stopping")
+
+#         logging.info("Running Test ....")
+#         test_loss, test_acc = do_eval(sess, model, testX, testY, batch_size)
+#         if args.is_classifier:
+#             print("Test Loss: {:.4f}".format(test_loss), "Test Accuracy: {:.4f}".format(test_acc))
+#         else:
+#             print("Test Loss: {:.4f}".format(test_loss))
+
+from flask import Flask, request, jsonify
 import logging
 import os
 import sys
@@ -430,6 +604,8 @@ from models.Seq2SeqAttn import Seq2SeqAttn
 from models.TextCNN import TextCNN
 from models.TextRCNN import TextRCNN
 from models.TextRNN import TextRNN
+
+app = Flask(__name__)
 
 filter_sizes = [1, 2, 3, 4, 5, 6, 7]
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -452,11 +628,10 @@ def do_eval(sess, model, evalX, evalY, batch_size):
 
     return np.mean(val_loss), np.mean(val_acc)
 
-if __name__ == '__main__':
-    ckpt_dir = "ckpt_dir"
-    if not path.exists("./ckpt_dir"):
-        os.mkdir("./ckpt_dir")
-
+@app.route('/train', methods=['POST'])
+def train():
+    # Here you would receive any necessary data for training from the request
+    # For example, you could receive parameters in the request body or as query parameters
     # Parse Arguments
     args = config.parse_args(sys.argv[1:])
     datadir = args.dir
@@ -586,3 +761,8 @@ if __name__ == '__main__':
             print("Test Loss: {:.4f}".format(test_loss), "Test Accuracy: {:.4f}".format(test_acc))
         else:
             print("Test Loss: {:.4f}".format(test_loss))
+
+    return jsonify({"message": "Training completed successfully"})
+
+if __name__ == '__main__':
+    app.run(debug=True)
