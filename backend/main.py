@@ -628,7 +628,7 @@ def do_eval(sess, model, evalX, evalY, batch_size):
 
     return np.mean(val_loss), np.mean(val_acc)
 
-@app.route('/train', methods=['POST'])
+@app.route('/extract_locations', methods=['POST'])
 def train():
     # Here you would receive any necessary data for training from the request
     # For example, you could receive parameters in the request body or as query parameters
